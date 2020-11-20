@@ -437,7 +437,7 @@ Jackdaw does not yet have any utility functions for performing inference since I
 
 ## A closer look at defmodel
 
-*NOTE: This section can be skipped if you're prefer understanding the big picture over the details*
+*NOTE: This section can be skipped if you prefer understanding the big picture over the details*
 
 As we've seen, jackdaw models are defined using a macro called `DEFMODEL`.
 
