@@ -554,6 +554,24 @@ To see what happens to Jack's mood if the coin is unfair, we can instantiate the
 
 **Excercise.** Try to modify the code we used before to process moments to work with the parameterized model and calculate `P(Mood = sad)` with different kinds of unfair coins. Experiment with very low and very high probabilities of heads.
 
+## Between-moment dependencies and marginalization
+
+* Marginalization
+    What is going on here? Since none of the variables depend on variables in the previous moment, the only information 
+
+When modeling multiple moments, the number of congruent states may multiply.
+The number of outcomes in a single moment described by the 'jack' model is four.
+The number of possible outcomes of two subsequent moments is sixteen.
+Jack may be sad first, even though the coin came up heads, and he may be happy next while the coin came up tails, or he may be happy first and happy later given the same coin tosses, etc., etc.
+All in all, there are 16 possibilities.
+
+When all variables are observed, the number of congruent states before the first moment is four and after the first moment only one remains.
+Given that one state, there are four possible things that can happen in the next moment.
+
+For example, when we hid the value of `coin`, the  
+Since the generative model 'jack' does not have any *between-moment* dependencies, outcomes in each moment are independent of outcomes in previous moments. 
+Because of this, when jackdaw only generates four states in the second
+
 # Deterministic constraints
 
 The fact that a constraint defines the possible values of the variable as a function of the values of its parents represents what distinguishes a jackdaw model from a regular Bayesian network.
@@ -603,11 +621,50 @@ As an excersise, try to make `P&Q` observable, and study what happens to the con
   (process-sequence m '((:p&q t))))
 ```
 
-# That's it for now
+## Between moment dependencies
 
-The deterministic constraints described in the last section may seem somewhat arbitrary, but they become useful when describing more complex models.
-For an example of such a model, see the enculturation model displayed at the beginning of this tutorial.
+* Between-moment dependencies
+* Marginalization
+* Recursive variables, one-shot variables, accumulator variables
+* Viewpoint -> tonality model
+* Model training
+* CLI: freezing and loading and CSV output
+* iPython notebook analysis
 
-There's much more to cover: one-shot variables, recursive variables, using jackdaw with the CLI interface, more complex models such as derived viewpoints of a multiple viewpoint system, models with meter and key as hidden variables.
+* Excercise: how many states will this generate
 
-Let me know if you're interested, I'll be glad to help.
+It is also possible to make 
+
+```common-lisp
+(defmodel logical-and () ()
+   ((P () (uniform ()) '(nil t) :hidden t)
+    (Q (^Q) (uniform ()) '(if (inactive? $^q) (nil t) (list (and ^q p))) :hidden t)))
+```
+
+
+```
+(let ((probabilities:*log-space* nil) 
+	  (m (make-logical-and-instance :output t)))
+  (make-observable m 'p&q)
+  (process-sequence m '((:p&q t))))
+```
+
+## A more complex model
+
+At last, we switch gears and will implement a scale degree viewpoint of a multiple viewpoint system and turn it into a probabilistic model of tonality.
+
+# Model training
+
+So far, we've been providing the parameters of probability distributions manually.
+We could have calculated these parameters from empirical observation, for example by counting the number of times heads comes up in a series of coin tosses.
+However, some probability distributions support doing this automatically.
+but it is also possible to "train" a model automatically.
+
+# Using jackdaw from the command line
+
+In order to integrate jackdaw into my workflow, I also have written a simple command-line interface to jackdaw.
+Unfortunately, this interface is not completely general and is at the moment specific to the models that I worked with during my PhD.
+To use it, 
+
+* Model of scale degrees -> pitches and extent with requirement that must begin on tonic
+
