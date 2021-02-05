@@ -2,9 +2,6 @@
 
 Welcome!
 
-*If you're here to install the prerequisites for the tutorial, you can do this either by following the [IDyOM installation instructions](https://www.wikihow.com/Install-Ubuntu-on-VirtualBox) up to step three (if you've already installed IDyOM you can skip this), or by following [my condensed instructions below](#installing-a-lisp-environment).
-After that, skip ahead to [downloading jackdaw and IDyOM](#downloading-jackdaw-and-idyom) to download the materials for the tutorial. Feel free to read the introduction below too.*
-
 In this tutorial, we'll cover some basic concepts in the jackdaw modeling framework and installation of jackdaw and some of its basic concepts.
 You'll learn how to make a simple model using the framework and you'll learn how run an existing model, train it on a corpus, and generate and analyse simulation results.
 
@@ -123,7 +120,7 @@ curl -O https://beta.quicklisp.org/quicklisp.lisp
 To install *Quicklisp* and ensure that SBCL loads it automatically, run 
 
 ```bash
-echo '(quicklisp-quickstart:install)(ql:add-to-init-file) | sbcl --load quicklisp.lisp
+echo '(quicklisp-quickstart:install)(ql:add-to-init-file)' | sbcl --load quicklisp.lisp
 ```
 
 Now run
@@ -421,7 +418,7 @@ In other words, the sum of the probabilities all congruent states.
 
 The evidence value printed in the output can be seen as the probability that the model assigns to the situation in the moment, or sequence of moments in its input.
 
-**Excercise.** use jackdaw to calculate the probability that in two subsequent moment, the coin toss is heads and Jack is happy in the first moment and the coin toss is tails and Jack is unhappy in the second moment. (If you get stuck here, ask me for clarification!)
+**Excercise.** use jackdaw to calculate the probability that in two subsequent moment, the coin toss is heads and Jack is happy in the first moment and the coin toss is tails and Jack is unhappy in the second moment.
 
 So far, we've only seen so-called *fully observed* models, in which there is only one congruent states.
 However, we can make the model *partially observed* by *hiding* one of its variables.
@@ -593,12 +590,11 @@ Since we're temporarily not interested in probabilities, all variables are defin
 
 We've defined three variables.
 The third variable, `P&Q` depends on both `P` and `Q`.
-It is an example of a *deterministic variable* since it always generates one outcome whose value corresponds to the logical and of `P` and `Q`.
+The possible values of this variable are defined by `(list (and $p $q))`.
+Note that this is a function of the values of `P` and `Q` and that these values are accessed by prefixing their names with `$` (like one would access a variable in shell scripting, in case you need a mnemonic). 
+Note also that this is an example of a *deterministic variable*: it always generates one possible outcome whose value corresponds to the logical and of `P` and `Q`.
 
-The part of the variable definition that defines its possible values as a function of its dependencies (parents in the network graph) is called the constraint function.
-
-The constraint function of `P&Q` is `(list (and $p $q))`.
-Notice that the values of the parents of `P&Q` are accessible to this function by their names preceded by `$`.
+This part of the variable definition in which its possible values are defined as a function of its dependencies (parents in the network graph) is called the *constraint function*.
 
 To see the possible outcomes of this model, run the following snippet.
 
@@ -668,3 +664,10 @@ To use it,
 
 * Model of scale degrees -> pitches and extent with requirement that must begin on tonic
 
+##
+
+The deterministic constraints described in the last section may seem somewhat arbitrary, but they become useful when describing more complex models. For an example of such a model, see the enculturation model displayed at the beginning of this tutorial.
+
+There's much more to cover: one-shot variables, recursive variables, using jackdaw with the CLI interface, more complex models such as derived viewpoints of a multiple viewpoint system, models with meter and key as hidden variables.
+
+Let me know if you're interested, I'll be glad to help.
