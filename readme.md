@@ -6,10 +6,10 @@ For more information about jackdaw, see [its repository](https://github.com/expe
 
 ## Table of contents
 
-[0. Prerequisites](0-prerequisites)
+[0. Prerequisites](0-prerequisites.md)
 
-[1. Installation](1-installation)
+[1. Installation](1-installation.md)
 
-[2. The basics ](2-the-basics)
+[2. The basics ](2-the-basics.md)
 
 3\. Defining and training models (coming soon)
