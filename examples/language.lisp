@@ -6,11 +6,16 @@
 (jd:defmodel letter-ppm (jd:dynamic-bayesian-network) 
   (&key 
    order
-   update-exclusion?
+   update-exclusion
    (mixtures t)
+   (escape :c)
    (alphabet '(a b c d r)))
   ((Letters (^Letters)
-	    (jd:ppms ())
+	    (jd:ppms ()
+		     :order-bound order
+		     :update-exclusion update-exclusion
+		     :mixtures mixtures
+		     :escape escape)
 	    (jd:markov order $^letters alphabet))
    (Current-letter (Letters)
 		   (jd:uniform ())
@@ -23,7 +28,7 @@
   (&key order (alphabet '(a b c)))
   ((Language ()
 	     (jd:cpt ())
-	     (list '(english dutch))
+	     '(english dutch)
 	     :observer #'first)
    (Letters (^Letters Language)
 	    (jd:ppms (Language))
@@ -43,15 +48,21 @@
     (reverse subs)))
 
 (defun prepare-text (text)
-  (let* ((text (cl-ppcre:regex-replace-all
+  (let* (;; Replace dash followed by newline with empty string
+	 (text (cl-ppcre:regex-replace-all
 		(cl-ppcre:create-scanner '(:sequence #\- #\newline) :multi-line-mode t)
 		text ""))
+	 ;; Replace other newlines with spaces
 	 (text (cl-ppcre:regex-replace-all
 		(cl-ppcre:create-scanner '(:sequence #\newline) :multi-line-mode t)
 		text " "))
+	 ;; Attempt to replace diacritics with ASCI characters
 	 (text (cl-strings:clean-diacritics text))
+	 ;; Remove everything that isn't a letter or whitespace
 	 (text (cl-ppcre:regex-replace-all "[^A-Za-z ]" text ""))
+	 ;; Remove repetitions of whitespace
 	 (text (cl-ppcre:regex-replace-all "  +" text " "))
+	 ;; Convert everything to lower case
 	 (text (string-downcase text)))
     (coerce text 'list)))
 
@@ -62,27 +73,72 @@
 (defun annotate (data value)
   (mapcar (lambda (item) (list value item))  data))
 
-(defun estimate-letter-ppm-model (filename)
-  (let* ((data (load-language-data filename))
+(defmethod estimate-model ((m letter-ppm)
+			   &optional (file "materials/alice-in-wonderland.txt"))
+  (let* ((data (load-language-data file))
 	 (alphabet (remove-duplicates data))
-	 (data (split-list data 100))
-	 (model (make-letter-ppm-model :order 10 :alphabet alphabet :observe '(current-letter))))
-    (jd:estimate model data)))
+	 (data (split-list data 100)))
+    (setf (alphabet m) alphabet)
+    (jd:hide m)
+    (jd:observe m 'Current-letter)
+    (jd:estimate m data)))
 
-(defun estimate-language-model ()
-  (let* ((dutch (load-language-data "materials/de-komedianten.txt"))
-	 (english (load-language-data "materials/alice-in-wonderland.txt"))
-	 (length (min (length dutch) (length english))) 
+(defmethod estimate-model ((m language)
+			   &optional (data-dir "materials/"))
+  (let* ((dutch (load-language-data
+		 (format nil "~ade-komedianten.txt" data-dir)))
+	 (english (load-language-data
+		   (format nil "~aalice-in-wonderland.txt" data-dir)))
+	 (length (print (min (length dutch) (length english))))
 	 (dutch (subseq dutch 0 length))
 	 (english (subseq english 0 length))
 	 (alphabet (remove-duplicates (append dutch english)))
 	 (dutch (split-list (annotate dutch 'dutch) 100))
 	 (english (split-list (annotate english 'english) 100))
-	 (data (append dutch english))
-	 (model (make-language-model :alphabet alphabet :observe '(language current-letter))))
-    (jd:estimate model data)))
+	 (data (append dutch english)))
+    (setf (alphabet m) alphabet)
+    (jd:hide m)
+    (jd:observe m 'Language 'Current-letter)
+    (jd:estimate m data)))
 
-(defun text-info-rate (m s)
+(defmethod text-info-rate ((m letter-ppm) s)  
   (let ((probabilities:*log-space* t))
     (/ (jd:probability m (prepare-text s))
        (length s))))
+
+(defmethod classify-language ((m language) s)
+  (jd:hide m)
+  (jd:observe m 'Current-letter)
+  (term:table
+   (jd:state-probability-table
+    (jd:posterior (jd:generate m (prepare-text s)))
+    :variables '(language))
+   :column-width 15))
+
+;; Example uses letter-ppm model
+;;
+;; (defparameter *letter-ppm* (make-letter-ppm-model))
+;;
+;; (estimate-model *letter-ppm* "path/to/materials/alice-in-wonderland.txt")
+;; 
+;; (text-info-rate *letter-ppm* "The probability that this particular English sentence has never been written before is substantial")
+;; (text-info-rate *letter-ppm* "Een zin in een andere taal")
+;; (text-info-rate *letter-ppm* "Bob")
+;; (text-info-rate *letter-ppm* "Alice")
+;; (text-info-rate *letter-ppm* "Rabbit")
+;; (text-info-rate *letter-ppm* "Uasbgoe")
+;;
+;; Example usage language model
+;; 
+;; (defparameter *language* (make-language-model))
+;;
+;; Or with order bound:
+;;
+;; (defparameter *language* (make-language-model :order 5))
+;;
+;; (estimate-model *language* "path/to/jackdaw-tutorial/materials/")
+;;
+;; Models with an order bound are surprisingly unsure about this one:
+;; (classify-language *language* "Welke taal is dit?")
+;; (classify-language *language* "Which language is this?")
+

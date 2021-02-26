@@ -1,7 +1,7 @@
 (ql:quickload "fare-csv")
 (ql:quickload "jackdaw")
 (ql:quickload "cl-ansi-term")
-o
+
 (defparameter *pitch-names-with-sharps* '(c c# d d# e f f# g g# a a# b ))
 (defparameter *pitch-names-with-flats* '(c db d eb e f gb g ab a bb b))
 
@@ -48,7 +48,7 @@ o
 	  (lambda (m)
 	    (if (listp m) (third m) m)))
    (Pitch-name (Tonic Pitch)
-	       (jd:deterministic ())
+	       (jd:uniform ())
 	       (list
 		(pitch-name $tonic $pitch
 			    :octave-size octave))
@@ -86,15 +86,14 @@ o
   (let ((data (load-data path)))
     (jd:estimate model data)))
 
-;; Example usage
+;; Example usage 
 ;;
-;; (defparameter *key* (make-musical-key-model :order 0))
-;; (parameterize-model *key* "materials/mtc-melodies.csv")
-;;
-;; ;; This should generate one congruent state
-;;
-;; (jd:generate-congruent-values
-;;  (make-musical-key-model :pitch-alphabet (loop for p below 24 collect p)
-;;                          :observe '(tonic-name scale pitch-name))
-;;  '((db major db0))
-;;  '(tonic-name mode scale-degree pitch-name))
+;; (defparameter *key* (make-musical-key-model))
+;; (parameterize-model *key* "path/to/jackdaw-tutorial/materials/mtc-melodies.csv")
+;; (jd:hide *key*)
+;; (jd:observe *key* 'pitch)
+;; (term:table 
+;;  (jd:state-probability-table 
+;;   (jd:posterior (jd:generate *key* '(7 5 4 0 2 7 0)))
+;;   :variables '(tonic-name scale) :sort t)
+;;  :column-width 15)

@@ -47,37 +47,41 @@
 	  (list (- (car $d) $^p))))))
 
 
-(defun annotate (iois meter phase-0)
+(defun rhythm (iois &optional meter phase-0)
   "Utility function for annotating a list of IOIs with initial phase and meter."
-  (loop for ioi in iois
-	collect (cons phase-0 (append meter (list ioi)))))
+  (flet ((annotate (ioi)
+	   (cond ((and (null meter) (null phase-0))
+		  ioi)
+		 ((null phase-0)
+		  (error "Providing only a meter and no initial phase is not allowed"))
+		 (t
+		  (cons phase-0 (append meter (list ioi)))))))
+    (mapcar #'annotate (cons jackdaw:+inactive+ iois))))
 
 ;; Example usage
 ;;
-;; (defparameter *model*
+;; (jd:defparameter *model*
 ;;   (make-instance 'rhythm
-;; 		 :ioi-domain '(1 2 3 4)
-;; 		 :meter-domain '((8 4) (6 4) (6 8))
-;; 		 :p0-observer #'first
-;; 		 :m-observer (lambda (m) (list (second m) (third m)))
-;; 		 :i-observer (lambda (m) (if (listp m) (fourth m) m))))
-;;
-;; (let ((data (list (annotate (list +inactive+ 4 2 2 4 1 1 1 1 4) '(8 4) 0)
-;; 		     (annotate (list +inactive+ 3 1 1 1 2 1 3 3) '(6 8) 0)
-;; 		     (annotate (list +inactive+ 2 1 1 2 2 1 1 2 2 2 2 1 1 4) '(6 4) 0))))
-;;   (hide *model*) ; hide the entire model
-;;   (observe *model* 'i 'm 'p0)  ; configure I and M to be observed in *MODEL*
-;;   (estimate *model* data)) ; estimate the model from the data
+;;                  :ioi-domain '(1 2 3 4)
+;;                  :meter-domain '((8 4) (6 4) (6 8))
+;;                  :p0-observer #'first
+;;                  :m-observer (lambda (m) (list (second m) (third m)))
+;;                  :i-observer (lambda (m) (if (listp m) (fourth m) m))))
 ;; 
-;; (hide *model* 'm 'p0)
-;;
-;; (probability *model* (list +inactive+ 1))
-;;
+;; (let ((data (list (rhythm '(4 2 2 4 1 1 1 1 4)           '(8 4) 0)
+;;                   (rhythm '(3 1 1 1 2 1 3 3)             '(6 8) 0)
+;;                   (rhythm '(2 1 1 2 2 1 1 2 2 2 2 1 1 4) '(6 4) 0))))
+;;   (jackdaw:hide *model*) ; hide the entire model
+;;   (jackdaw:observe *model* 'i 'm 'p0)  ; configure I and M to be observed in *MODEL*
+;;   (jackdaw:estimate *model* data)) ; estimate the model from the data
+;; 
+;; (jackdaw:hide *model* 'm 'p0)
+;; 
+;; (jackdaw:probability *model* (list +inactive+ 1))
+;; 
 ;; (term:table 
-;;  (state-probability-table
-;;   (marginalize 
-;;    (posterior-distribution
-;;     *model*
-;;     (generate *model* (list +inactive+ 4 2 2 4)))
-;;    '(m))
-;;   'm) :column-width 12)
+;;  (jackdaw:state-probability-table
+;;   (jackdaw:marginalize 
+;;    (jackdaw:posterior
+;;     (jackdaw:generate *model* (rhythm '(4 2 2 4))))
+;;   '(m))) :column-width 12)

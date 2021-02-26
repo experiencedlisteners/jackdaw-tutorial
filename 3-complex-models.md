@@ -165,7 +165,7 @@ In order to do this, we need to make sure the model is *fully observed*.
 This is done as follows:
 
 ```common-lisp
-CL-USER> (jd:observe *jacke* 'Focus 'Game)
+CL-USER> (jd:observe *jackie* 'Focus 'Game)
 ```
 
 Now we need some data.
@@ -340,18 +340,19 @@ Let's forget about inference for a moment and work with a simple, fully observed
 
 
 ```common-lisp
-(jd:defmodel letters () ()
+(jd:defmodel letters (jd:dynamic-bayesian-network)
+  ()
   ((Letter ()
 	   (jd:cpt ())
 	   '(#\a #\b)
-       :observe #'identity)))
+	   :observer #'identity)))
 ```
 
 We now know how to instantiate and estimate the model:
 
 ```common-lisp
-(defparameter *letter* (make-letter-model))
-(jd:estimate *letter* '((#\a #\b #\b #\b)))
+CL-USER> (defparameter *letter* (make-letters-model))
+CL-USER> (jd:estimate *letter* '((#\a #\b #\b #\b)))
 ```
 
 We can make writing input a bit more convenient with this utility function:
@@ -364,18 +365,25 @@ We can make writing input a bit more convenient with this utility function:
 Now, we can do estimation as follows:
 
 ```common-lisp
-(defparameter *letter* (make-letter-model))
-(jd:estimate *letter* (list (characters "abbbaabb")))
+CL-USER> (defparameter *letter* (make-letter-model))
+...
+CL-USER> (jd:estimate *letter* '((#\a #\b #\b #\b)
+                                 (#\b #\a #\a)))
+...
 ```
 
 We also know by now how to evaluate the probability of a sequence of new letters.
 Note, however, that since the probability of each letter is independent from the previous letters, different orderings of the same letters have the same probability. 
 
 ```common-lisp
-(jd:probability *letter* '(characters "a")
-(jd:probability *letter* '(characters "b")
-(jd:probability *letter* '(characters "ab")
-(jd:probability *letter* '(characters "ba")
+CL-USER> (jd:probability *letter* (characters "a"))
+...
+CL-USER> (jd:probability *letter* (characters "b"))
+...
+CL-USER> (jd:probability *letter* (characters "ab"))
+...
+CL-USER> (jd:probability *letter* (characters "ba"))
+...
 ```
 
 We can change this by making the probability of each letter dependent on the previous letter.
@@ -384,12 +392,12 @@ Such dependencies are created in jackdaw by simply inserting the `^` character i
 Thus, the model below conditions Letter on its value in the previous moment, ^letter. 
 
 ```common-lisp
-(jd:defmodel letter-bigrams () 
-  (&key (alphabet (characters "ab"))
+(jd:defmodel letter-bigrams (jd:dynamic-bayesian-network) 
+  (&key (alphabet (characters "ab")))
   ((Letter (^Letter)
 	   (jd:cpt (^Letter))
 	   alphabet
-       :observe #'identity)))
+       :observer #'identity)))
 ```
 
 Note that we also add ^Letter to the list of dependencies of its CPT distribution, ensuring that the probability of each letter depends on the previous letter.
@@ -410,21 +418,22 @@ Below we have extended the letter-bigram model above to keep track of the preced
 
 ```common-lisp
 (defvar +filler+ '✳)
-(defmodel letter-trigram () (&key (alphabet '(a b)))
+(jd:defmodel letter-trigram (jd:dynamic-bayesian-network)
+  (&key (alphabet '(a b)))
   ((Letters (^Letters)
-	   (ngram-model (^Letters))
-	   (if (inactive? $^letters)
-	       (loop for l in alphabet 
-            collect (list l +filler+ +filler+))
-	       (loop for l in alphabet
-            collect (list l (first $^letters)
-                             (second $^letters)))))))
+	    (jd:ngram-model (^Letters))
+	    (if (jd:inactive? $^letters)
+		(loop for l in alphabet 
+		      collect (list l +filler+ +filler+))
+		(loop for l in alphabet
+		      collect (list l (first $^letters)
+				    (second $^letters)))))))
 ```
 
-One thing here is particularly noteworthy: the if statemement `(if (inactive? $^letters) ...)`.
+One thing here is particularly noteworthy: the if statemement `(if (jd:inactive? $^letters) ...)`.
 The symbol `$^letters` here refers to the previous value of Letters.
 (Recall that in congruency constraints, variables are accessed by prefixing their names with the `$` character.)
-The function `(inactive? x)` checks if the variable `x` has a special value that indicates that we are in the first moment and there is no previous value of x.
+The function `(jd:inactive? x)` checks if the variable `x` has a special value that indicates that we are in the first moment and there is no previous value of x.
 
 The congruency constraint of Letters states that *if we're in the first moment*, generate a trigram consisting of each letter of the alpabet and two arbitrary filler symbols.
 If we're not in the first moment, generate a trigram consisting of a new letter from the alphabet and the first and second item of the previous trigram.
@@ -437,22 +446,28 @@ Among various macros that jackdaw provides for writing congruency constraints is
 The code below illustrates this.
 
 ```common-lisp
-(jd:defmodel letter-trigram () (&key (alphabet '(a b)))
+(jd:defmodel letter-trigram (jd:dynamic-bayesian-network)
+  (&key (alphabet '(a b)))
   ((Letters (^Letters)
 	   (jd:ngram-model ())
-       (jd:markov 3 ^letters alphabet))))
+       (jd:markov 2 $^letters alphabet))))
 ```
 
 Note that rather than a CPT conditioned on the previous value of Letters, we now use the special distribution `ngram-model` that jackdaw provides.
 We should not condition this distribution on the previous value of Letter since it uses its current value (which is a trigram) to determine the probability that the current letter follows the preceding two.
 
+The first argument to `MARKOV` is the *Markov order*: the number of previous events on which the current one is conditioned.
+A subtlety to keep in mind is that the Markov order of a tri-gram model is two, not three, since a tri-gram state consists of the current value as well as the two preceding ones.
+
 Finally, we might as well make *n* a parameter of the model as follows:
 
 ```common-lisp
-(jd:defmodel letter-trigram () (n &key (alphabet '(a b)))
+(jd:defmodel letter-ngram (jd:dynamic-bayesian-network)
+  (n &key (alphabet '(a b)))
   ((Letters (^Letters)
 	   (jd:ngram-model ())
-       (jd:markov (- n 1) ^letters alphabet))))
+       (jd:markov (unless (null n) (- n 1))
+                  $^letters alphabet))))
 ```
 
 But how do we observe such *n*-gram models?
@@ -461,14 +476,16 @@ Luckily we can avoid this by making use of a *deterministic variable*.
 We can use congruency constraints to add another variable to the model, Current-letter, which depends on Letter and whose only possible value is the last letter added to the *n*-gram.
 
 ```common-lisp
-(jd:defmodel letter-ngram () (n &key (alphabet '(a b)))
+(jd:defmodel letter-ngram (jd:dynamic-bayesian-network)
+  (n &key (alphabet '(a b)))
   ((Letters (^Letters)
-	   (jd:ngram ())
-       (jd:markov (1- n) ^letters n alphabet))
+	    (jd:ngram-model ())
+	    (jd:markov (unless (null n) (- n 1))
+		       $^letters alphabet))
    (Current-letter (Letters)
-	   (jd:uniform ())
-       (jd:deterministic (car $letters))
-       :observer #'identity)))
+		   (jd:uniform ())
+		   (jd:deterministic (car $letters))
+		   :observer #'identity)))
 ```
 
 Note the use of `DETERMINISTIC` in the congruency constraint of `Current-letter`.
@@ -486,18 +503,18 @@ Furthermore, unlike `GENERATE`, it produces a list of congruent values for each 
 Thus, to see the congruent values generated by the model above, when no variables are observed, we can do:
 
 ```common-lisp
-(defparameter *letter-ngram* (make-letter-ngram-model 2))
-(jd:generate-congruent-values *letter-ngram* '(nil)) ; congruent values for a sequence of one moment  
+CL-USER> (defparameter *letter-ngram* (make-letter-ngram-model 2))
+CL-USER> (jd:generate-congruent-values *letter-ngram* '(nil)) ; congruent values for a sequence of one moment  
 ```
 
 The code below displays a table of congruent states in the second moment.
 Note that for each bigram, the Current-letter variable contains the leftmost item (that is, the most recent).
 
 ```common-lisp
-(term:table 
- (cons (jd::vertices *language*) 
-       (second (jd::generate-congruent-values *language* '(nil nil nil))))
- :column-width 15)
+CL-USER> (term:table 
+          (cons (jd::vertices *language*) 
+                (second (jd::generate-congruent-values *language* '(nil nil nil))))
+          :column-width 15)
 ```
 
 If you feel like you need to develop more intuition for what's going on, experiment with the code above by replacing `second` with `first` or `third`, or observing Current-letter.
@@ -515,12 +532,7 @@ The code below illustrates how we turn the `letter-ngram` model into one that us
 
 ```common-lisp
 (jd:defmodel letter-ppm (jd:dynamic-bayesian-network) 
-  (&key 
-   order
-   update-exclusion?
-   (escape :c)
-   (mixtures t)
-   (alphabet '(a b c d r)))
+  (&key order (alphabet '(a b c d r)))
   ((Letters (^Letters)
 	    (jd:ppms () :order-bound order)
 	    (jd:markov order $^letters alphabet))
@@ -543,14 +555,14 @@ To make the model more configurable, we could define these as model parameters (
 (jd:defmodel letter-ppm (jd:dynamic-bayesian-network) 
   (&key 
    order
-   update-exclusion?
+   update-exclusion
    (mixtures t)
    (escape :c)
    (alphabet '(a b c d r)))
   ((Letters (^Letters)
 	    (jd:ppms ()
 		     :order-bound order
-		     :update-exclusion? update-exclusion?
+		     :update-exclusion update-exclusion
 		     :mixtures mixtures
 		     :escape escape)
 	    (jd:markov order $^letters alphabet))
@@ -562,7 +574,7 @@ To make the model more configurable, we could define these as model parameters (
 		     (if (listp m) (second m) m)))))
 ```
 
-If you'd like to try out this model data more interesting than "Sheep language" ("bbaaabaabaa"), have a look at the extra material below.
+If you'd like to try out this model data more interesting than "Sheep language", have a look at the extra material below.
 
 ## Extra material: classifying languages
 
@@ -571,28 +583,6 @@ The empirical data in question consists two classic books from English and Dutch
 The books have been digitized and archived by the fantastic [Project Gutenberg](https://www.gutenberg.org/).
 
 To try this out, open the file [`examples/language.lisp`](examples/language.lisp) in Emacs and try running the commented out code at the bottom at the REPL.
-
-To get started, try some of the things below:
-
-To train the model on Dutch language data:
-
-```common-lisp
-CL-USER> (defparameter *letter-ppm* (estimate-letter-ppm-model "materials/de-komedianten.txt"))
-CL-USER> (text-info-rate *letter-ppm* "Dit is een Nederlandse zin")
-CL-USER> (text-info-rate *letter-ppm* "This is an English sentence")
-CL-USER> (text-info-rate *letter-ppm* "Lasdf ewk fds Balkejw iesefhj")
-```
-
-You may need to augment to path `"materials/de-komedianten.txt"` with the path to where you cloned this repository.
-
-To train the model on English language data:
-
-```common-lisp
-CL-USER> (defparameter *letter-ppm* (estimate-letter-ppm-model "materials/alice-in-wonderland.txt"))
-CL-USER> (text-info-rate *letter-ppm* "Dit is een Nederlandse zin")
-CL-USER> (text-info-rate *letter-ppm* "This is an English sentence")
-CL-USER> (text-info-rate *letter-ppm* "Lasdf ewk fds Balkejw iesefhj")
-```
 
 # Music
 
@@ -623,7 +613,7 @@ Thus, given a scale in Gb, G has scale degree 1, Ab has scale degree 2, etc.
 We'll represent pitches simply as the number of half steps up from the lowest C.
 
 In a multiple viewpoint system, we would proceed by defining a viewpoint function that calculates the scale-degree given a pitch and a tonic.
-That function could for example look as follows:
+That function could for example look like this:
 
 ```common-lisp
 (mod (- pitch tonic) 12)
@@ -647,15 +637,15 @@ This alphabet consists of simply the numbers zero to 11.
 
 We're now ready to define the generative model.
 
-```
+```common-lisp
 (jd:defmodel scale-degree-viewpoint (jd:dynamic-bayesian-network)
   (tonic &key order-bound (octave 12)
 	 (pitch-alphabet (loop for p below 24 collect p)))
   ((Scale-degree (^Scale-degree)
 		 (jd:ppms ())
 		 (jd:markov
-		  $^scale-degree
 		  order-bound
+		  $^scale-degree
 		  (loop for deg below octave collect deg)))
    (Pitch (Scale-degree)
 	  (jd:uniform ())
@@ -666,11 +656,14 @@ We're now ready to define the generative model.
 	  :observer #'identity)))
 ```
 
-To check that it works, let's generate its congruent values. 
+To verify that it works, let's generate its congruent values. 
 
-```
-(defparameter *scale-degree* (make-scale-degree-viewpoint-model 5))
-(term:table (cons (jd::vertices *scale-degree*) (first (jd::generate-congruent-values *scale-degree* '(nil)))) :column-width 15)
+```common-lisp
+CL-USER> (defparameter *scale-degree* (make-scale-degree-viewpoint-model 5))
+CL-USER> (term:table 
+          (cons (jd::vertices *scale-degree*)
+                (first (jd::generate-congruent-values *scale-degree* '(nil)))) 
+          :column-width 15)
 ```
 
 We've made the tonic a parameter of the model, but to be more general, we could assume that each event has a pitch and tonic attribute, as is the case in IDyOM.
@@ -682,8 +675,8 @@ We've made the tonic a parameter of the model, but to be more general, we could 
   ((Scale-degree (^Scale-degree)
 		 (jd:ppms ())
 		 (jd:markov
-		  $^scale-degree
 		  order-bound
+		  $^scale-degree
 		  (loop for deg below octave collect deg)))
    (Event (Scale-degree)
 	  (jd:uniform ())
@@ -696,9 +689,14 @@ We've made the tonic a parameter of the model, but to be more general, we could 
 	  :observer #'identity)))
 ```
 
+Let's try this out:
+
 ```common-lisp
-(defparameter *scale-degree* (make-scale-degree-viewpoint-model 5))
-(term:table (cons (jd::vertices *scale-degree*) (first (jd::generate-congruent-values *scale-degree* '((5 4))))) :column-width 15)
+CL-USER> (defparameter *scale-degree* (make-scale-degree-viewpoint-model 5))
+CL-USER> (term:table 
+          (cons (jd::vertices *scale-degree*) 
+                (first (jd::generate-congruent-values *scale-degree* '((5 4)))))
+          :column-width 15)
 ```
 
 However, since the first variant of the scale-degree-viewpoint is a bit more legible, we'll continue to use that one.
@@ -740,10 +738,10 @@ Now to our earlier definition, we'll add a deterministic variable, Pitch-name, t
   ((Scale-degree (^Scale-degree)
 		 (jd:ppms ())
 		 (jd:markov
-		  $^scale-degree
 		  order-bound
-		  (loop for deg below octave collect deg)
-          :observer #'identity))
+		  $^scale-degree
+		  (loop for deg below octave collect deg))
+		 :observer #'identity)
    (Pitch (Scale-degree)
 	  (jd:uniform ())
 	  (loop for pitch in pitch-alphabet
@@ -754,7 +752,7 @@ Now to our earlier definition, we'll add a deterministic variable, Pitch-name, t
    (Pitch-name (Pitch)
 	       (jd:uniform ())
 	       (jd:deterministic
-		(pitch-name tonic $pitch octave))
+		(pitch-name tonic $pitch :octave-size octave))
           :observer #'identity)))
 ```
 
@@ -764,14 +762,17 @@ Let's explore this model further.
 We'll create a scale-degree model in the key of F, and set scale degree to observed.
 
 ```common-lisp
-(defparameter *scale-degree* (make-scale-degree-viewpoint-model 5))
-(jd:observe *scale-degree* 'scale-degree)
+CL-USER> (defparameter *scale-degree* (make-scale-degree-viewpoint-model 5))
+CL-USER> (jd:observe *scale-degree* 'scale-degree)
 ```
 
 Now let's see which pitches are consistent with an observed scale degree.
 
 ```common-lisp
-(term:table (cons (jd::vertices *scale-degree*) (first (jd::generate-congruent-values *scale-degree* '((4))))) :column-width 15)
+CL-USER> (term:table 
+          (cons (jd::vertices *scale-degree*)
+                (first (jd::generate-congruent-values *scale-degree* '((4)))))
+          :column-width 15)
 ```
 
 In our model definition, we can see that Pitch has a uniform distribution given scale degree.
@@ -782,9 +783,9 @@ It looks like we have successfully recreated a derived viewpoint!
 Finally, let's observe Pitch-name (and hide Scale-degree) so we can evaluate the model on a melody written as a sequence of note names.
 
 ```common-lisp
-(jd:hide *scale-degree* 'Scale-degree)
-(jd:observe *scale-degree* 'Pitch-name)
-(last (jd::generate-congruent-values *scale-degree* '(F0 G0 A0)))
+CL-USER> (jd:hide *scale-degree* 'Scale-degree)
+CL-USER> (jd:observe *scale-degree* 'Pitch-name)
+CL-USER> (last (jd::generate-congruent-values *scale-degree* '(F0 G0 A0)))
 ```
 
 This yields the congruent values of the model in the last moment.
@@ -818,24 +819,24 @@ The result is the model below (where for convenience, we've also added a determi
 	   (loop for tonic below octave collect tonic))
 	  :observer #'first)
    (Tonic-name (Tonic) ; only for convenience
-	       (jd:deterministic ())
+	       (jd:uniform ())
 	       (jd:deterministic
 		(pitch-name $tonic $tonic :octave-size octave :exclude-octave t))
 	       :observer #'first)
    (Scale-degree (^Scale-degree)
 		 (jd:ppms () :order-bound order)
-		 (jd:markov $^scale-degree order
+		 (jd:markov order $^scale-degree
 			    (loop for deg below octave collect deg))
 		 :observer #'second)
    (Pitch (Tonic Scale-degree) ; now also depends on Tonic
 	  (jd:uniform ())
 	  (loop for pitch in pitch-alphabet
-		if (eq (mod (- pitch $tonic) 12)
-		       (car $scale-degree)) ; use variable $tonic, rather than constant tonic
+		if (eq (mod (- pitch $tonic) 12) ; use variable $tonic, rather than constant tonic
+		       (car $scale-degree))
 		  collect pitch)
 	  :observer (lambda (m) (if (listp m) (second m) m)))
    (Pitch-name (Tonic Pitch)
-	       (jd:deterministic ())
+	       (jd:uniform ())
 	       (jd:deterministic
 		(pitch-name $tonic $pitch :octave-size octave))
 	       :observer (lambda (m) (if (listp m) (second m) m)))))
@@ -866,7 +867,7 @@ The final result is shown below.
 	   (loop for tonic below octave collect tonic))
 	  :observer #'first)
    (Tonic-name (Tonic) ; only for convenience
-	       (jd:deterministic ())
+	       (jd:uniform ())
 	       (jd:deterministic
 		(pitch-name $tonic $tonic :octave-size octave :exclude-octave t))
 	       :observer #'first)
@@ -876,7 +877,7 @@ The final result is shown below.
 	  :observer #'second)
    (Scale-degree (^Scale-degree Scale)
 		 (jd:ppms (Scale) :order-bound order)
-		 (jd:markov $^scale-degree order
+		 (jd:markov order $^scale-degree
 			    (loop for deg below octave collect deg))
 		 :observer #'third)
    (Pitch (Tonic Scale-degree) ; now also depends on Tonic
@@ -887,20 +888,20 @@ The final result is shown below.
 		  collect pitch)
 	  :observer (lambda (m) (if (listp m) (third m) m)))
    (Pitch-name (Tonic Pitch)
-	       (jd:deterministic ())
+	       (jd:uniform ())
 	       (jd:deterministic
 		(pitch-name $tonic $pitch :octave-size octave))
 	       :observer (lambda (m) (if (listp m) (third m) m)))))
 ```
 
-You can find this model in the file `examples/tonality.lisp`, along with some functions for estimating it from empirical data.
+You can find this model in the file [`examples/tonality.lisp`](examples/tonality.lisp), along with some functions for estimating it from empirical data.
 The empirical data in question is either a set of folk melodies from the Meertens Tunes Collection, or from the Essen Folksong Collection.
 These can be found in the `materials` folder.
 
-If you open the file [`examples/tonality.lisp`](examples/tonality.lisp) in Emacs and hit `C-c C-k` to compile it, you should be able to do the following:
+If you open the file [`examples/tonality.lisp`](examples/tonality.lisp) in Emacs and hit `C-c C-k` to compile it all (you may need first to compile the lines that start with `(ql:quickload ` individually with `C-c C-c`), you should be able to do the following:
 
 ```common-lisp
-(defparameter *key* (make-musical-key-model :order 0))
+CL-USER> (defparameter *key* (make-musical-key-model :order 0))
 ```
 
 to create an instance of the musical key model with an order bound of zero: that is, we consider scale degrees without context.
@@ -908,7 +909,7 @@ If you want to bring out the big guns immediately, you could set :order to NIL, 
 The following will load some folk melodies, annotated with key and scale, and estimate the musical key model.
 
 ```common-lisp
-(parameterize-model *key* "materials/mtc-melodies.csv")
+CL-USER> (parameterize-model *key* "path/to/jackdaw-tutorial/materials/mtc-melodies.csv")
 ```
 
 Now, we can for example verify that the model makes predictions that we would expect.
@@ -916,34 +917,33 @@ To show the probabilities it assigns to different scale degrees within a key, we
 Then, we marginalize these to find out the probabilities for just scale degrees.
 
 ```common-lisp
-(jd:hide *key*) ; hide everything
-(jd:observe *key* 'tonic scale) 
-(term:table 
- (jd:state-probability-table 
-  (jd:marginalize 
-   (jd:posterior 
-    (jd:generate *key* '((C# major))))
-   '(scale-degree))
-  :variables '(scale-degree) :sort t)
- :column-width 15)
+CL-USER> (jd:hide *key*) ; hide everything
+CL-USER> (jd:observe *key* 'tonic-name 'scale) 
+CL-USER> (term:table 
+          (jd:state-probability-table 
+           (jd:marginalize 
+            (jd:posterior 
+             (jd:generate *key* '((C# major))))
+            '(scale-degree))
+           :variables '(scale-degree) :sort t)
+          :column-width 15)
 ```
 
 Finally, to infer a posterior distribution over Tonic and Scale given a melody, we hide all variables except for pitch and evaluate the model on a pitch sequence:
 
 ```common-lisp
-(jd:hide *key*)
-(jd:observe *key* 'pitch) 
-(term:table 
- (jd:state-probability-table 
-  (jd:posterior (jd:generate *key* '(0 7 8 7 3)))
-  :variables '(tonic-name scale) :sort t)
- :column-width 15)
+CL-USER> (jd:hide *key*)
+CL-USER> (jd:observe *key* 'pitch) 
+CL-USER> (term:table 
+          (jd:state-probability-table 
+           (jd:posterior (jd:generate *key* '(7 5 4 0 2 7 0)))
+           :variables '(tonic-name scale) :sort t)
+          :column-width 15)
 ```
 
 ## Extra material
 
 The file [`examples/rhythm.lisp`](examples/rhythm.lisp) contains an implementation of the rhythm model presented in [my PhD thesis](https://hdl.handle.net/11245.1/dd3e25aa-6006-486e-afcf-c0692e0afacd), as well as some code for trying it out.
-Preprocessed data 
 
 # Summary
 
