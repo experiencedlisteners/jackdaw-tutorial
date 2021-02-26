@@ -71,7 +71,7 @@ Otherwise, see [this page](https://git-scm.com/book/en/v2/Getting-Started-Instal
 
 In order to keep all materials for this workshop in one place, I recommend that you to create a single directory in which you download all the materials.
 In fact, you can simply clone this tutorial into your home directory.
-I'll assume throughout that you have done this and that all materials are in `~/jackdaw-tutorial' (on Windows, you could pick something like `C:\jackdaw-tutorial`).
+I'll assume throughout that you have done this and that all materials are in `~/jackdaw-tutorial` (on Windows, you could pick something like `C:\jackdaw-tutorial`).
 You can download these files to any other location if you prefer, just remember to correct the paths mentioned below to your custom location.
 
 To clone this tutorial, open a terminal (make sure you've [installed git](#installing-git)) and type

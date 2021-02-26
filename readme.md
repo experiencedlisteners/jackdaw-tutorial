@@ -12,4 +12,4 @@ For more information about jackdaw, see [its repository](https://github.com/expe
 
 [2. The basics ](2-the-basics.md)
 
-3\. Defining and training models (coming soon)
+[3. Complex models](3-complex-models.md)
